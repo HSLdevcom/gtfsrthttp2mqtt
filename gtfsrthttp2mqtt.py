@@ -1,19 +1,20 @@
-import sys
 import time
-
-import paho.mqtt.client as mqtt
 from threading import Event, Thread
 
+import paho.mqtt.client as mqtt
 import requests
 
 import gtfs_realtime_pb2
 
 
+## https://stackoverflow.com/questions/22498038/improve-current-implementation-of-a-setinterval-python/22498708#22498708
 def call_repeatedly(interval, func, *args):
     stopped = Event()
+
     def loop():
-        while not stopped.wait(interval): # the first call is in `interval` secs
+        while not stopped.wait(interval):  # the first call is in `interval` secs
             func(*args)
+
     Thread(target=loop, daemon=True).start()
     return stopped.set
 
@@ -26,8 +27,8 @@ class GTFSRTHTTP2MQTTTransformer:
         self.gtfsrtFeedURL = gtfsrtFeedURL
         self.mqttConnected = False
 
-    def onMQTTConnected(self,client, userdata, flags, rc):
-        print("Connected with result code "+str(rc))
+    def onMQTTConnected(self, client, userdata, flags, rc):
+        print("Connected with result code " + str(rc))
         if rc != 0:
             return False
         self.mqttConnected = True
@@ -47,7 +48,7 @@ class GTFSRTHTTP2MQTTTransformer:
         self.cancelPoller = call_repeatedly(15, self.doGTFSRTPolling)
 
     def doGTFSRTPolling(self):
-        print("doGTFSRTPolling",time.ctime())
+        print("doGTFSRTPolling", time.ctime())
         r = requests.get(self.gtfsrtFeedURL)
 
         feedmsg = gtfs_realtime_pb2.FeedMessage()
@@ -72,8 +73,8 @@ class GTFSRTHTTP2MQTTTransformer:
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
-        {'host':None},
-        {'username':None,'password':None},
+        {'host': None},
+        {'username': None, 'password': None},
         '/gtfsrt/tre/vp',
         None
     )
@@ -82,5 +83,3 @@ if __name__ == '__main__':
         gh2mt.connectMQTT()
     finally:
         gh2mt.cancelPoller()
-
-
