@@ -39,7 +39,7 @@ class GTFSRTHTTP2MQTTTransformer:
         self.client = mqtt.Client()
         self.client.on_connect = self.onMQTTConnected
         self.client.connect(**self.mqttConnect)
-        if self.mqttCredentials:
+        if self.mqttCredentials and self.mqttCredentials['username'] and self.mqttCredentials['password']:
             self.client.username_pw_set(**self.mqttCredentials)
         self.client.loop_forever()
 
@@ -64,7 +64,7 @@ class GTFSRTHTTP2MQTTTransformer:
                 nent.CopyFrom(e)
 
                 sernmesg = nfeedmsg.SerializeToString()
-                self.client.publish("gtfsrt/tre/vp", sernmesg)
+                self.client.publish(self.mqttTopic, sernmesg)
 
         except:
             print(r.content)
@@ -73,10 +73,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
-        {'host': None},
-        {'username': None, 'password': None},
-        '/gtfsrt/tre/vp',
-        None
+        {'host': os.environ[MQTT_BROKER_URL]},
+        {'username': os.environ[USERNAME], 'password': os.environ[PASSWORD]},
+        '/gtfsrt/{0}/{1}'.format(os.environ[FEED_NAME], os.environ[FEED_TYPE]),
+        os.environ[FEED_URL]
     )
 
     try:
