@@ -1,4 +1,5 @@
 import time
+import os
 from threading import Event, Thread
 
 import paho.mqtt.client as mqtt
@@ -20,10 +21,10 @@ def call_repeatedly(interval, func, *args):
 
 
 class GTFSRTHTTP2MQTTTransformer:
-    def __init__(self, mqttConnect, mqttCredentials, mqttTopic, gtfsrtFeedURL):
+    def __init__(self, mqttConnect, mqttCredentials, baseMqttTopic, gtfsrtFeedURL):
         self.mqttConnect = mqttConnect
         self.mqttCredentials = mqttCredentials
-        self.mqttTopic = mqttTopic
+        self.baseMqttTopic = baseMqttTopic
         self.gtfsrtFeedURL = gtfsrtFeedURL
         self.mqttConnected = False
 
@@ -39,13 +40,14 @@ class GTFSRTHTTP2MQTTTransformer:
         self.client = mqtt.Client()
         self.client.on_connect = self.onMQTTConnected
         self.client.connect(**self.mqttConnect)
-        if self.mqttCredentials:
+        if self.mqttCredentials and self.mqttCredentials['username'] and self.mqttCredentials['password']:
             self.client.username_pw_set(**self.mqttCredentials)
         self.client.loop_forever()
 
     def startGTFSRTPolling(self):
         print("Starting poller")
-        self.cancelPoller = call_repeatedly(15, self.doGTFSRTPolling)
+        polling_interval = int(os.environ.get('INTERVAL', 5))
+        self.cancelPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
@@ -54,17 +56,34 @@ class GTFSRTHTTP2MQTTTransformer:
         feedmsg = gtfs_realtime_pb2.FeedMessage()
         try:
             feedmsg.ParseFromString(r.content)
-            for e in feedmsg.entity:
+            for entity in feedmsg.entity:
                 nfeedmsg = gtfs_realtime_pb2.FeedMessage()
                 nfeedmsg.header.gtfs_realtime_version = "1.0"
                 nfeedmsg.header.incrementality = nfeedmsg.header.DIFFERENTIAL
                 nfeedmsg.header.timestamp = int(time.time())
                 nent = nfeedmsg.entity.add()
 
-                nent.CopyFrom(e)
+                nent.CopyFrom(entity)
+
+                route_id_remove_first = int(os.environ.get('ROUTE_ID_REMOVE_FIRST', 0)) # Remove first n characters
+                route_id_remove_last = int(os.environ.get('ROUTE_ID_REMOVE_LAST', 0)) # Remove last n characters
+                if route_id_remove_last > 0:
+                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:-route_id_remove_last]
+                else:
+                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:]
+                direction_id = entity.vehicle.trip.direction_id
+                trip_headsign = entity.vehicle.vehicle.label
+                start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
+                vehicle_id = entity.vehicle.vehicle.id
+
+                # gtfsrt/vp/<feed_Id>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<next_stop>/<start_time>/<vehicle_id>
+                # GTFS RT feed used for testing was missing some information so those are empty
+                full_topic = '{0}////{1}/{2}/{3}//{4}/{5}'.format(
+                    self.baseMqttTopic, route_id, direction_id,
+                    trip_headsign, start_time, vehicle_id)
 
                 sernmesg = nfeedmsg.SerializeToString()
-                self.client.publish("gtfsrt/tre/vp", sernmesg)
+                self.client.publish(full_topic, sernmesg)
 
         except:
             print(r.content)
@@ -73,10 +92,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
-        {'host': None},
-        {'username': None, 'password': None},
-        '/gtfsrt/tre/vp',
-        None
+        {'host': os.environ['MQTT_BROKER_URL']},
+        {'username': os.environ['USERNAME'], 'password': os.environ['PASSWORD']},
+        '/gtfsrt/{0}/{1}'.format(os.environ['FEED_TYPE'], os.environ['FEED_NAME']),
+        os.environ['FEED_URL']
     )
 
     try:
