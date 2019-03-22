@@ -67,7 +67,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 route_id_remove_first = int(os.environ.get('ROUTE_ID_REMOVE_FIRST', 0)) # Remove first n characters
                 route_id_remove_last = int(os.environ.get('ROUTE_ID_REMOVE_LAST', 0)) # Remove last n characters
-                route_id = entity.vehicle.trip.route_id[route_id_remove_first:-route_id_remove_last]
+                if route_id_remove_last > 0:
+                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:-route_id_remove_last]
+                else:
+                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:]
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
