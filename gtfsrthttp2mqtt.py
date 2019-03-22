@@ -46,8 +46,8 @@ class GTFSRTHTTP2MQTTTransformer:
 
     def startGTFSRTPolling(self):
         print("Starting poller")
-        polling_delay = int(os.environ.get('DELAY', 5))
-        self.cancelPoller = call_repeatedly(polling_delay, self.doGTFSRTPolling)
+        polling_interval = int(os.environ.get('INTERVAL', 5))
+        self.cancelPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
