@@ -73,14 +73,15 @@ class GTFSRTHTTP2MQTTTransformer:
                     route_id = entity.vehicle.trip.route_id[route_id_remove_first:]
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
+                trip_id = entity.vehicle.trip.trip_id
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
 
-                # gtfsrt/vp/<feed_Id>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<next_stop>/<start_time>/<vehicle_id>
+                # gtfsrt/vp/<feed_Id>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}////{1}/{2}/{3}//{4}/{5}'.format(
+                full_topic = '{0}////{1}/{2}/{3}/{4}//{5}/{6}'.format(
                     self.baseMqttTopic, route_id, direction_id,
-                    trip_headsign, start_time, vehicle_id)
+                    trip_headsign, trip_id, start_time, vehicle_id)
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
