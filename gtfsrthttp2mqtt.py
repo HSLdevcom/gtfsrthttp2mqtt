@@ -19,7 +19,7 @@ def call_repeatedly(interval, func, *args):
             func(*args)
         print("Polling stopped")
 
-    Thread(target=loop, daemon=True).start()
+    Thread(target=loop, daemon=False).start()
     return stopped.set
 
 
