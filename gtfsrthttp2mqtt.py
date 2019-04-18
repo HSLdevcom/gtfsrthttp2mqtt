@@ -17,6 +17,7 @@ def call_repeatedly(interval, func, *args):
     def loop():
         while not stopped.wait(interval):  # the first call is in `interval` secs
             func(*args)
+        print("Polling stopped")
 
     Thread(target=loop, daemon=True).start()
     return stopped.set
@@ -61,6 +62,8 @@ class GTFSRTHTTP2MQTTTransformer:
         print("doGTFSRTPolling", time.ctime())
         r = self.session.get(self.gtfsrtFeedURL)
 
+        if r.status_code != 200:
+            return
         feedmsg = gtfs_realtime_pb2.FeedMessage()
         try:
             feedmsg.ParseFromString(r.content)
