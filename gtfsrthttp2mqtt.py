@@ -4,6 +4,8 @@ from threading import Event, Thread
 
 import paho.mqtt.client as mqtt
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 
 import gtfs_realtime_pb2
 
@@ -15,8 +17,9 @@ def call_repeatedly(interval, func, *args):
     def loop():
         while not stopped.wait(interval):  # the first call is in `interval` secs
             func(*args)
+        print("Polling stopped")
 
-    Thread(target=loop, daemon=True).start()
+    Thread(target=loop, daemon=False).start()
     return stopped.set
 
 
@@ -27,6 +30,12 @@ class GTFSRTHTTP2MQTTTransformer:
         self.baseMqttTopic = baseMqttTopic
         self.gtfsrtFeedURL = gtfsrtFeedURL
         self.mqttConnected = False
+        self.session = requests.Session()
+        retry = Retry(connect=60, backoff_factor=1.5)
+        adapter = HTTPAdapter(max_retries=retry)
+        self.session.mount(gtfsrtFeedURL, adapter)
+
+
 
     def onMQTTConnected(self, client, userdata, flags, rc):
         print("Connected with result code " + str(rc))
@@ -51,8 +60,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
-        r = requests.get(self.gtfsrtFeedURL)
+        r = self.session.get(self.gtfsrtFeedURL)
 
+        if r.status_code != 200:
+            return
         feedmsg = gtfs_realtime_pb2.FeedMessage()
         try:
             feedmsg.ParseFromString(r.content)
