@@ -14,5 +14,3 @@ You need to configure at least the following env variables that are marked as ma
 * (optional) "USERNAME" username for publishing to a MQTT broker
 * (optional) "PASSWORD" password for publishing to a MQTT broker
 * (optional) "INTERVAL" how long to wait between fetching new data from HTTP(S) data feed
-* (optional) "ROUTE_ID_REMOVE_FIRST" remove first n characters from route_id before publishing
-* (optional) "ROUTE_ID_REMOVE_LAST" remove last n characters from route_id before publishing
