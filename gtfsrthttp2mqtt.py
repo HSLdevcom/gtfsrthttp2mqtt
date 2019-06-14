@@ -86,14 +86,14 @@ class GTFSRTHTTP2MQTTTransformer:
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
-                latitude = str(entity.vehicle.position.latitude)
+                latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
                 latitude_head = latitude[:2]
-                longitude = str(entity.vehicle.position.longitude)
+                longitude = "{:.6f}".format(entity.vehicle.position.longitude)
                 longitude_head = longitude[:2]
-                geohash_head = latitude_head+";"+longitude_head
-                geohash_firstdeg = latitude[3]+""+longitude[3]
-                geohash_seconddeg = latitude[4]+""+longitude[4]
-                geohash_thirddeg = latitude[5]+""+longitude[5]
+                geohash_head = latitude_head + ";" + longitude_head
+                geohash_firstdeg = latitude[3] + "" + longitude[3]
+                geohash_seconddeg = latitude[4] + "" +longitude[4]
+                geohash_thirddeg = latitude[5] + "" + longitude[5]
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
 
