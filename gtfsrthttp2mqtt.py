@@ -92,7 +92,7 @@ class GTFSRTHTTP2MQTTTransformer:
                 longitude_head = longitude[:2]
                 geohash_head = latitude_head + ";" + longitude_head
                 geohash_firstdeg = latitude[3] + "" + longitude[3]
-                geohash_seconddeg = latitude[4] + "" +longitude[4]
+                geohash_seconddeg = latitude[4] + "" + longitude[4]
                 geohash_thirddeg = latitude[5] + "" + longitude[5]
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
