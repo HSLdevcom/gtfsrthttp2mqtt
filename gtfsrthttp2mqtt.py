@@ -8,6 +8,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 import gtfs_realtime_pb2
+import route_utils
 
 
 ## https://stackoverflow.com/questions/22498038/improve-current-implementation-of-a-setinterval-python/22498708#22498708
@@ -24,11 +25,12 @@ def call_repeatedly(interval, func, *args):
 
 
 class GTFSRTHTTP2MQTTTransformer:
-    def __init__(self, mqttConnect, mqttCredentials, baseMqttTopic, gtfsrtFeedURL):
+    def __init__(self, mqttConnect, mqttCredentials, baseMqttTopic, gtfsrtFeedURL, feedName):
         self.mqttConnect = mqttConnect
         self.mqttCredentials = mqttCredentials
         self.baseMqttTopic = baseMqttTopic
         self.gtfsrtFeedURL = gtfsrtFeedURL
+        self.feedName = feedName
         self.mqttConnected = False
         self.session = requests.Session()
         retry = Retry(connect=60, backoff_factor=1.5)
@@ -80,12 +82,7 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 nent.CopyFrom(entity)
 
-                route_id_remove_first = int(os.environ.get('ROUTE_ID_REMOVE_FIRST', 0)) # Remove first n characters
-                route_id_remove_last = int(os.environ.get('ROUTE_ID_REMOVE_LAST', 0)) # Remove last n characters
-                if route_id_remove_last > 0:
-                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:-route_id_remove_last]
-                else:
-                    route_id = entity.vehicle.trip.route_id[route_id_remove_first:]
+                route_id = route_utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id)
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
@@ -100,10 +97,10 @@ class GTFSRTHTTP2MQTTTransformer:
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
 
-                # gtfsrt/vp/<feed_Id>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
+                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}////{1}/{2}/{3}/{4}//{5}/{6}//{7}/{8}/{9}/{10}/'.format(
-                    self.baseMqttTopic, route_id, direction_id,
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}//{6}/{7}//{8}/{9}/{10}/{11}/'.format(
+                    self.baseMqttTopic, self.feedName, route_id, direction_id,
                     trip_headsign, trip_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
                     geohash_seconddeg, geohash_thirddeg)
 
@@ -118,8 +115,9 @@ if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
         {'host': os.environ['MQTT_BROKER_URL']},
         {'username': os.environ['USERNAME'], 'password': os.environ['PASSWORD']},
-        '/gtfsrt/{0}/{1}'.format(os.environ['FEED_TYPE'], os.environ['FEED_NAME']),
-        os.environ['FEED_URL']
+        '/gtfsrt/{0}'.format(os.environ['FEED_TYPE']),
+        os.environ['FEED_URL'],
+        os.environ['FEED_NAME']
     )
 
     try:
