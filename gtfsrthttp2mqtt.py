@@ -86,18 +86,26 @@ class GTFSRTHTTP2MQTTTransformer:
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
+                latitude = str(entity.vehicle.position.latitude)
+                latitude_head = latitude[:2]
+                longitude = str(entity.vehicle.position.longitude)
+                longitude_head = longitude[:2]
+                geohash_head = latitude_head+";"+longitude_head
+                geohash_firstdeg = latitude[3]+""+longitude[3]
+                geohash_seconddeg = latitude[4]+""+longitude[4]
+                geohash_thirddeg = latitude[5]+""+longitude[5]
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
 
-                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>
+                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}//{6}/{7}'.format(
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}//{6}/{7}/{8}/{9}/{10}/{11}/'.format(
                     self.baseMqttTopic, self.feedName, route_id, direction_id,
-                    trip_headsign, trip_id, start_time, vehicle_id)
+                    trip_headsign, trip_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
+                    geohash_seconddeg, geohash_thirddeg)
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
-
         except:
             print(r.content)
             raise
