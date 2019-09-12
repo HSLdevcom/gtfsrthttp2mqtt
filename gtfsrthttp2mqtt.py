@@ -74,6 +74,9 @@ class GTFSRTHTTP2MQTTTransformer:
         try:
             feedmsg.ParseFromString(r.content)
             for entity in feedmsg.entity:
+                if not entity.vehicle.trip.HasField("route_id"):
+                    continue
+
                 nfeedmsg = gtfs_realtime_pb2.FeedMessage()
                 nfeedmsg.header.gtfs_realtime_version = "1.0"
                 nfeedmsg.header.incrementality = nfeedmsg.header.DIFFERENTIAL
