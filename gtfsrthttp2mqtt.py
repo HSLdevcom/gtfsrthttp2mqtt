@@ -74,7 +74,9 @@ class GTFSRTHTTP2MQTTTransformer:
         try:
             feedmsg.ParseFromString(r.content)
             for entity in feedmsg.entity:
-                if not entity.vehicle.trip.HasField("route_id"):
+                # Don't send message if route_id is missing from entity
+                # HasField() function does not work as expected, therefore we need check it like this
+                if "route_id" not in map(lambda x: x.name, entity.vehicle.trip.DESCRIPTOR.fields):
                     continue
 
                 nfeedmsg = gtfs_realtime_pb2.FeedMessage()
