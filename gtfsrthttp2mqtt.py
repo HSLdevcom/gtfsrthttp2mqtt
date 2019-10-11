@@ -45,7 +45,7 @@ class GTFSRTHTTP2MQTTTransformer:
             return False
         if self.mqttConnected is True:
             print("Reconnecting and restarting poller")
-            self.cancelPoller.cancel()
+            self.cancelPoller()
         self.mqttConnected = True
 
         self.startGTFSRTPolling()
