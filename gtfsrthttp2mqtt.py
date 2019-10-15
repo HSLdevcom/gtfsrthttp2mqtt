@@ -8,7 +8,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 import gtfs_realtime_pb2
-import route_utils
+import utils
 
 
 ## https://stackoverflow.com/questions/22498038/improve-current-implementation-of-a-setinterval-python/22498708#22498708
@@ -87,8 +87,8 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 nent.CopyFrom(entity)
 
-                route_id = route_utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id)
-                direction_id = entity.vehicle.trip.direction_id
+                route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id)
+                direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id)
                 trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
                 latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
@@ -99,14 +99,15 @@ class GTFSRTHTTP2MQTTTransformer:
                 geohash_firstdeg = latitude[3] + "" + longitude[3]
                 geohash_seconddeg = latitude[4] + "" + longitude[4]
                 geohash_thirddeg = latitude[5] + "" + longitude[5]
+                stop_id = entity.vehicle.stop_id
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
 
                 # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}//{6}/{7}/{8}/{9}/{10}/{11}/'.format(
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/'.format(
                     self.baseMqttTopic, self.feedName, route_id, direction_id,
-                    trip_headsign, trip_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
+                    trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
                     geohash_seconddeg, geohash_thirddeg)
 
                 sernmesg = nfeedmsg.SerializeToString()
