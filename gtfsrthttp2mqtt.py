@@ -91,10 +91,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 nent.CopyFrom(entity)
 
-                route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id)
-                direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id)
-                trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
+                route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
+                direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id, trip_id, self.OTPData)
+                trip_headsign = entity.vehicle.vehicle.label
                 latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
                 latitude_head = latitude[:2]
                 longitude = "{:.6f}".format(entity.vehicle.position.longitude)
@@ -106,13 +106,14 @@ class GTFSRTHTTP2MQTTTransformer:
                 stop_id = entity.vehicle.stop_id
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
+                short_name = utils.parse_short_name(self.feedName, trip_id, route_id, self.OTPData)
 
-                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
+                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/'.format(
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/'.format(
                     self.baseMqttTopic, self.feedName, route_id, direction_id,
                     trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
-                    geohash_seconddeg, geohash_thirddeg)
+                    geohash_seconddeg, geohash_thirddeg, short_name)
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
@@ -145,8 +146,13 @@ class GTFSRTHTTP2MQTTTransformer:
             print('Failed to fetch OTP data :(', x.__class__.__name__)
         else:
             print('Fetched new OTP data')
-            self.OTPData = response.json()
-            print(self.OTPData)
+            data_dictionary = {}
+            data_type = 'routes' if 'routes' in response.json()['data'] else 'trips'
+            for element in response.json()['data'][data_type]:
+                gtfsId = element['gtfsId']
+                del element['gtfsId']
+                data_dictionary[gtfsId] = element
+            self.OTPData = data_dictionary
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
