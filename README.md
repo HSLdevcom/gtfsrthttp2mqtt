@@ -13,4 +13,6 @@ You need to configure at least the following env variables that are marked as ma
 * (mandatory) "FEED_URL" URL for the HTTP(S) GTFS RT data source
 * (optional) "USERNAME" username for publishing to a MQTT broker
 * (optional) "PASSWORD" password for publishing to a MQTT broker
-* (optional) "INTERVAL" how long to wait between fetching new data from HTTP(S) data feed
+* (optional, default 5) "INTERVAL" how long to wait in seconds between fetching new data from HTTP(S) data feed
+* (optional, default https://dev-api.digitransit.fi/routing/v1/routers/waltti/index/graphql) "OTP_URL" defines where to fetch otp data from
+* (optional, default 3600) "OTP_INTERVAL" defines in seconds the wait time between fetching new data from OTP
