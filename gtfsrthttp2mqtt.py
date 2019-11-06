@@ -48,10 +48,8 @@ class GTFSRTHTTP2MQTTTransformer:
             print("Reconnecting and restarting poller")
             self.GTFSRTPoller()
         self.mqttConnected = True
-        self.doOTPPolling()
+        self.doOTPPolling() #first round of polling otp data
         self.startGTFSRTPolling()
-        # sleep before starting
-        # time.sleep(int(os.environ.get('OTP_INTERVAL', 60 * 60))) # default 1 hour
         self.startOTPPolling()
 
     def connectMQTT(self):
