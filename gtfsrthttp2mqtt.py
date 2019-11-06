@@ -36,6 +36,7 @@ class GTFSRTHTTP2MQTTTransformer:
         retry = Retry(connect=60, backoff_factor=1.5)
         adapter = HTTPAdapter(max_retries=retry)
         self.session.mount(gtfsrtFeedURL, adapter)
+        self.OTPData = None
 
 
 
@@ -45,10 +46,13 @@ class GTFSRTHTTP2MQTTTransformer:
             return False
         if self.mqttConnected is True:
             print("Reconnecting and restarting poller")
-            self.cancelPoller()
+            self.GTFSRTPoller()
         self.mqttConnected = True
-
+        self.doOTPPolling()
         self.startGTFSRTPolling()
+        # sleep before starting
+        # time.sleep(int(os.environ.get('OTP_INTERVAL', 60 * 60))) # default 1 hour
+        self.startOTPPolling()
 
     def connectMQTT(self):
         self.client = mqtt.Client()
@@ -59,9 +63,9 @@ class GTFSRTHTTP2MQTTTransformer:
         self.client.loop_forever()
 
     def startGTFSRTPolling(self):
-        print("Starting poller")
+        print("Starting GTFS RT poller")
         polling_interval = int(os.environ.get('INTERVAL', 5))
-        self.cancelPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
+        self.GTFSRTPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
@@ -116,6 +120,33 @@ class GTFSRTHTTP2MQTTTransformer:
             print(r.content)
             raise
 
+    def startOTPPolling(self):
+        print("Starting OTP poller")
+        polling_interval = int(os.environ.get('OTP_INTERVAL', 60 * 60)) # default 1 hour
+        self.OTPPoller = call_repeatedly(polling_interval, self.doOTPPolling)
+
+    def doOTPPolling(self):
+        OTP_URL = os.environ.get('OTP_URL', 'https://dev-api.digitransit.fi/routing/v1/routers/waltti/index/graphql')
+        otp_polling_session = requests.Session()
+        retry = Retry(
+            total=30,
+            read=30,
+            connect=30,
+            backoff_factor=10,
+            method_whitelist=frozenset(['GET', 'OPTIONS', 'POST'])
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        otp_polling_session.mount(OTP_URL, adapter)
+        query = utils.get_OTP_query(self.feedName)
+
+        try:
+            response = otp_polling_session.post(OTP_URL, json={'query': query})
+        except Exception as x:
+            print('Failed to fetch OTP data :(', x.__class__.__name__)
+        else:
+            print('Fetched new OTP data')
+            self.OTPData = response.json()
+            print(self.OTPData)
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
@@ -129,4 +160,5 @@ if __name__ == '__main__':
     try:
         gh2mt.connectMQTT()
     finally:
-        gh2mt.cancelPoller()
+        gh2mt.OTPPoller()
+        gh2mt.GTFSRTPoller()

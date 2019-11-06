@@ -10,3 +10,29 @@ def parse_direction_id(feed, direction_id):
     if feed == "OULU":
         return ""
     return direction_id
+
+def get_OTP_query(feed):
+    if feed == "OULU":
+        return """
+            {
+                trips(feeds: [\"OULU\"]) {
+                    route {
+                        shortName
+                    }
+                    gtfsId
+                    pattern {
+                        directionId
+                    }
+                }
+            }
+            """
+    else:
+        return """
+            {
+                routes(feeds: [\"%s\"]) {
+                    gtfsId
+                    shortName
+                }
+            }
+            """ % feed
+
