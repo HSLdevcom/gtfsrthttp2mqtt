@@ -8,7 +8,7 @@ from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
 import gtfs_realtime_pb2
-import route_utils
+import utils
 
 
 ## https://stackoverflow.com/questions/22498038/improve-current-implementation-of-a-setinterval-python/22498708#22498708
@@ -36,6 +36,7 @@ class GTFSRTHTTP2MQTTTransformer:
         retry = Retry(connect=60, backoff_factor=1.5)
         adapter = HTTPAdapter(max_retries=retry)
         self.session.mount(gtfsrtFeedURL, adapter)
+        self.OTPData = None
 
 
 
@@ -45,10 +46,11 @@ class GTFSRTHTTP2MQTTTransformer:
             return False
         if self.mqttConnected is True:
             print("Reconnecting and restarting poller")
-            self.cancelPoller.cancel()
+            self.GTFSRTPoller()
         self.mqttConnected = True
-
+        self.doOTPPolling() #first round of polling otp data
         self.startGTFSRTPolling()
+        self.startOTPPolling()
 
     def connectMQTT(self):
         self.client = mqtt.Client()
@@ -59,9 +61,9 @@ class GTFSRTHTTP2MQTTTransformer:
         self.client.loop_forever()
 
     def startGTFSRTPolling(self):
-        print("Starting poller")
+        print("Starting GTFS RT poller")
         polling_interval = int(os.environ.get('INTERVAL', 5))
-        self.cancelPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
+        self.GTFSRTPoller = call_repeatedly(polling_interval, self.doGTFSRTPolling)
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
@@ -87,10 +89,10 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 nent.CopyFrom(entity)
 
-                route_id = route_utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id)
-                direction_id = entity.vehicle.trip.direction_id
-                trip_headsign = entity.vehicle.vehicle.label
                 trip_id = entity.vehicle.trip.trip_id
+                route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
+                direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id, trip_id, self.OTPData)
+                trip_headsign = entity.vehicle.vehicle.label
                 latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
                 latitude_head = latitude[:2]
                 longitude = "{:.6f}".format(entity.vehicle.position.longitude)
@@ -99,15 +101,17 @@ class GTFSRTHTTP2MQTTTransformer:
                 geohash_firstdeg = latitude[3] + "" + longitude[3]
                 geohash_seconddeg = latitude[4] + "" + longitude[4]
                 geohash_thirddeg = latitude[5] + "" + longitude[5]
+                stop_id = entity.vehicle.stop_id
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
+                short_name = utils.parse_short_name(self.feedName, trip_id, route_id, self.OTPData)
 
-                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>
+                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}//{6}/{7}/{8}/{9}/{10}/{11}/'.format(
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/'.format(
                     self.baseMqttTopic, self.feedName, route_id, direction_id,
-                    trip_headsign, trip_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
-                    geohash_seconddeg, geohash_thirddeg)
+                    trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
+                    geohash_seconddeg, geohash_thirddeg, short_name)
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
@@ -115,6 +119,38 @@ class GTFSRTHTTP2MQTTTransformer:
             print(r.content)
             raise
 
+    def startOTPPolling(self):
+        print("Starting OTP poller")
+        polling_interval = int(os.environ.get('OTP_INTERVAL', 60 * 60)) # default 1 hour
+        self.OTPPoller = call_repeatedly(polling_interval, self.doOTPPolling)
+
+    def doOTPPolling(self):
+        OTP_URL = os.environ.get('OTP_URL', 'https://dev-api.digitransit.fi/routing/v1/routers/waltti/index/graphql')
+        otp_polling_session = requests.Session()
+        retry = Retry(
+            total=30,
+            read=30,
+            connect=30,
+            backoff_factor=10,
+            method_whitelist=frozenset(['GET', 'OPTIONS', 'POST'])
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        otp_polling_session.mount(OTP_URL, adapter)
+        query = utils.get_OTP_query(self.feedName)
+
+        try:
+            response = otp_polling_session.post(OTP_URL, json={'query': query})
+        except Exception as x:
+            print('Failed to fetch OTP data :(', x.__class__.__name__)
+        else:
+            print('Fetched new OTP data')
+            data_dictionary = {}
+            data_type = 'routes' if 'routes' in response.json()['data'] else 'trips'
+            for element in response.json()['data'][data_type]:
+                gtfsId = element['gtfsId']
+                del element['gtfsId']
+                data_dictionary[gtfsId] = element
+            self.OTPData = data_dictionary
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
@@ -128,4 +164,5 @@ if __name__ == '__main__':
     try:
         gh2mt.connectMQTT()
     finally:
-        gh2mt.cancelPoller()
+        gh2mt.OTPPoller()
+        gh2mt.GTFSRTPoller()
