@@ -95,6 +95,9 @@ class GTFSRTHTTP2MQTTTransformer:
                 route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
                 direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id, trip_id, self.OTPData)
                 trip_headsign = entity.vehicle.vehicle.label
+                # headsigns with / cause problems in topics
+                if '/' in trip_headsign:
+                    trip_headsign = ''
                 latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
                 latitude_head = latitude[:2]
                 longitude = "{:.6f}".format(entity.vehicle.position.longitude)
