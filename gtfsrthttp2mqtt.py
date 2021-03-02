@@ -110,13 +110,14 @@ class GTFSRTHTTP2MQTTTransformer:
                 start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
                 vehicle_id = entity.vehicle.vehicle.id
                 short_name = utils.parse_short_name(self.feedName, trip_id, route_id, self.OTPData)
+                color = utils.parse_color(self.feedName, trip_id, route_id, self.OTPData)
 
-                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/
+                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/<color>/
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/'.format(
+                full_topic = '{0}/{1}////{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/'.format(
                     self.baseMqttTopic, self.feedName, route_id, direction_id,
                     trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
-                    geohash_seconddeg, geohash_thirddeg, short_name)
+                    geohash_seconddeg, geohash_thirddeg, short_name, color)
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
