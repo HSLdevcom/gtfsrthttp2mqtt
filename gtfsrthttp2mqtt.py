@@ -115,8 +115,8 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/<color>/
                 # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}///{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/{15}/'.format(
-                    self.baseMqttTopic, self.feedName, mode, route_id, direction_id,
+                full_topic = '{0}/tampereTram///{1}/{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/'.format(
+                    self.baseMqttTopic, mode, route_id, direction_id,
                     trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
                     geohash_seconddeg, geohash_thirddeg, short_name, color)
 
