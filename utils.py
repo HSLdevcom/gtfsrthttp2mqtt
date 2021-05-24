@@ -1,6 +1,6 @@
 def parse_route_id(feed, route_id, trip_id, otp_data):
     if feed == "tampere":
-        if len(route_id) > 5 and route_id[-5:] == "47374":
+        if len(route_id) > 5 and (route_id[-5:] == "47374" or route_id[-5:] == "56920"):
             return route_id[0:-5]
         else:
             return route_id[0:-4]
