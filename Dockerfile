@@ -8,4 +8,4 @@ COPY gtfs_realtime_pb2.py /usr/src/app/
 COPY gtfsrthttp2mqtt.py /usr/src/app/
 COPY utils.py /usr/src/app/
 
-CMD ["python", "gtfsrthttp2mqtt.py" ]
+CMD ["python", "-u", "gtfsrthttp2mqtt.py" ]
