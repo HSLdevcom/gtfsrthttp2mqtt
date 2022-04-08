@@ -118,7 +118,7 @@ class GTFSRTHTTP2MQTTTransformer:
                 full_topic = '{0}/{1}///{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/{15}/'.format(
                     self.baseMqttTopic, self.feedName, mode, route_id, direction_id,
                     trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
-                    geohash_seconddeg, geohash_thirddeg, short_name, color)
+                    geohash_seconddeg, geohash_thirddeg, short_name, color).replace("+","").replace("#", "")
 
                 sernmesg = nfeedmsg.SerializeToString()
                 self.client.publish(full_topic, sernmesg)
