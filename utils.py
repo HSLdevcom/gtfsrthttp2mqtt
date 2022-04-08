@@ -27,7 +27,7 @@ def parse_short_name(feed, trip_id, route_id, otp_data):
         feed_scoped_id = "OULU:" + trip_id
         if feed_scoped_id not in otp_data:
             return ""
-        return otp_data[feed_scoped_id]["route"]["shortName"]
+        return otp_data[feed_scoped_id]["route"]["shortName"].replace("+","")
 
     feed_scoped_id = feed + ":" + route_id
     if feed_scoped_id not in otp_data:
