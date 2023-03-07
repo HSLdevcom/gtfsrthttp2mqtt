@@ -93,7 +93,7 @@ class GTFSRTHTTP2MQTTTransformer:
 
                 trip_id = entity.vehicle.trip.trip_id
                 route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
-                direction_id = utils.parse_direction_id(self.feedName, entity.vehicle.trip.direction_id, trip_id, self.OTPData)
+                direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
                 # headsigns with / cause problems in topics
                 if '/' in trip_headsign:
@@ -144,9 +144,12 @@ class GTFSRTHTTP2MQTTTransformer:
         adapter = HTTPAdapter(max_retries=retry)
         otp_polling_session.mount(OTP_URL, adapter)
         query = utils.get_OTP_query(self.feedName)
+        headers = {}
+        if "AUTHENTICATION_HEADER" in os.environ and "AUTHENTICATION_TOKEN" in os.environ:
+            headers[os.environ["AUTHENTICATION_HEADER"]] = os.environ["AUTHENTICATION_TOKEN"]
 
         try:
-            response = otp_polling_session.post(OTP_URL, json={'query': query})
+            response = otp_polling_session.post(OTP_URL, headers=headers, json={'query': query})
         except Exception as x:
             print('Failed to fetch OTP data :(', x.__class__.__name__)
         else:
