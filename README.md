@@ -11,6 +11,7 @@ You need to configure at least the following env variables that are marked as ma
 * (mandatory) "FEED_TYPE" which type of a GTFS RT data is provided (for example vp for vehicle position), used in MQTT topic
 * (mandatory) "FEED_NAME" name for the data feed, used in MQTT topic
 * (mandatory) "FEED_URL" URL for the HTTP(S) GTFS RT data source
+* (optional)  "FEED_HEADERS" headers for requesting GTFS RT feed
 * (mandatory as of 4.3.2023 if using Digitransit API) "AUTHENTICATION_HEADER" Authentication header name
 * (mandatory as of 4.3.2023 if using Digitransit API) "AUTHENTICATION_TOKEN" Authentication header secret
 * (optional) "USERNAME" username for publishing to a MQTT broker

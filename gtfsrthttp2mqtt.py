@@ -1,5 +1,6 @@
 import time
 import os
+import json
 from threading import Event, Thread
 
 import paho.mqtt.client as mqtt
@@ -25,7 +26,7 @@ def call_repeatedly(interval, func, *args):
 
 
 class GTFSRTHTTP2MQTTTransformer:
-    def __init__(self, mqttConnect, mqttCredentials, baseMqttTopic, gtfsrtFeedURL, feedName):
+    def __init__(self, mqttConnect, mqttCredentials, baseMqttTopic, gtfsrtFeedURL, gtfsrtFeedHeaders, feedName):
         self.mqttConnect = mqttConnect
         self.mqttCredentials = mqttCredentials
         self.baseMqttTopic = baseMqttTopic
@@ -36,6 +37,7 @@ class GTFSRTHTTP2MQTTTransformer:
         retry = Retry(connect=60, backoff_factor=1.5)
         adapter = HTTPAdapter(max_retries=retry)
         self.session.mount(gtfsrtFeedURL, adapter)
+        self.session.headers.update(json.loads(gtfsrtFeedHeaders))
         self.OTPData = None
 
 
@@ -168,6 +170,7 @@ if __name__ == '__main__':
         {'username': os.environ['USERNAME'], 'password': os.environ['PASSWORD']},
         '/gtfsrt/{0}'.format(os.environ['FEED_TYPE']),
         os.environ['FEED_URL'],
+        os.environ.get('FEED_HEADERS', '{}'),
         os.environ['FEED_NAME']
     )
 
