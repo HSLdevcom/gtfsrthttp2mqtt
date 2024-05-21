@@ -14,7 +14,7 @@ def parse_short_name(feed, trip_id, route_id, otp_data):
     feed_scoped_id = feed + ":" + route_id
     if feed_scoped_id not in otp_data:
         return ""
-    return otp_data[feed + ":" + route_id]["shortName"]
+    return otp_data[feed_scoped_id]["shortName"] or ""
 
 def parse_color(feed, trip_id, route_id, otp_data):
     if otp_data == None:
