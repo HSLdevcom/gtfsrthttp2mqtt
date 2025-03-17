@@ -2,7 +2,7 @@ certifi==2018.11.29
 chardet==3.0.4
 idna==2.8
 paho-mqtt==1.4.0
-protobuf==3.6.1
+protobuf==3.18.3
 public==2018.11.20
 query-string==2018.11.20
 requests==2.22.0
