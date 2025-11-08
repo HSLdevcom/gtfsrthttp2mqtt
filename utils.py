@@ -5,6 +5,10 @@ def parse_route_id(feed, route_id, trip_id, otp_data):
         if len(route_id) > 5 and (route_id[-5:] == "47374" or route_id[-5:] == "56920" or route_id[-5:] == "10299"):
             return route_id[0:-5]
         return route_id[0:-4]
+    if feed == "hbg":
+        if route_id is not None and ':' in trip_id:
+            return trip_id[:trip_id.rfind(':')+1]
+
     return route_id
 
 def parse_short_name(feed, trip_id, route_id, otp_data):
