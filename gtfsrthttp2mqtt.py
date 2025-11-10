@@ -39,6 +39,7 @@ class GTFSRTHTTP2MQTTTransformer:
         self.session.mount(gtfsrtFeedURL, adapter)
         self.session.headers.update(json.loads(gtfsrtFeedHeaders))
         self.OTPData = None
+        self.tripTimestamps = {}
 
 
 
@@ -94,6 +95,12 @@ class GTFSRTHTTP2MQTTTransformer:
                 nent.CopyFrom(entity)
 
                 trip_id = entity.vehicle.trip.trip_id
+                if trip_id is not None and trip_id in self.tripTimestamps and self.tripTimestamps[trip_id] > nfeedmsg.header.timestamp:
+                    # received older position for vehicle, to avoid back and forth jumping positions
+                    # just ignore that message
+                    continue
+                elif trip_id is not None:
+                    self.tripTimestamps[trip_id] = nfeedmsg.header.timestamp
                 route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
                 direction_id = entity.vehicle.trip.direction_id
                 trip_headsign = entity.vehicle.vehicle.label
@@ -163,6 +170,8 @@ class GTFSRTHTTP2MQTTTransformer:
                 del element['gtfsId']
                 data_dictionary[gtfsId] = element
             self.OTPData = data_dictionary
+            # Reset tripTimestamps to avoid caching outdated tripIds
+            self.tripTimestamps = {}
 
 if __name__ == '__main__':
     gh2mt = GTFSRTHTTP2MQTTTransformer(
