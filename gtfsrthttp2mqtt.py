@@ -39,7 +39,7 @@ class GTFSRTHTTP2MQTTTransformer:
         self.session.mount(gtfsrtFeedURL, adapter)
         self.session.headers.update(json.loads(gtfsrtFeedHeaders))
         self.OTPData = None
-
+        self.lastFeedTimestamp = None
 
 
     def onMQTTConnected(self, client, userdata, flags, rc):
@@ -77,6 +77,15 @@ class GTFSRTHTTP2MQTTTransformer:
         feedmsg = gtfs_realtime_pb2.FeedMessage()
         try:
             feedmsg.ParseFromString(r.content)
+
+            # Do not send messages for feeds older than already sent
+            feedTimestamp = feedmsg.header.timestamp
+            if self.lastFeedTimestamp is None or feedTimestamp >= self.lastFeedTimestamp:
+                self.lastFeedTimestamp = feedTimestamp
+            else:
+                print(f"Received a feed with timestamp earlier ({feedTimestamp}) than seen before ({self.lastFeedTimestamp}), skipping this update")
+                return
+
             for entity in feedmsg.entity:
                 if not entity.HasField('vehicle'):
                     continue
