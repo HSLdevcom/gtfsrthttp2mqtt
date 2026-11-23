@@ -1,14 +1,17 @@
+import hashlib
 import time
 import os
 import json
+import traceback
 from threading import Event, Thread
 
 import paho.mqtt.client as mqtt
 import requests
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
-import gtfs_realtime_pb2
+from google.protobuf.message import DecodeError
+from google.transit import gtfs_realtime_pb2
 import utils
 
 
@@ -18,7 +21,11 @@ def call_repeatedly(interval, func, *args):
 
     def loop():
         while not stopped.wait(interval):  # the first call is in `interval` secs
-            func(*args)
+            try:
+                func(*args)
+            except Exception:
+                # an uncaught error would end the polling thread for good
+                traceback.print_exc()
         print("Polling stopped")
 
     Thread(target=loop, daemon=False).start()
@@ -34,12 +41,15 @@ class GTFSRTHTTP2MQTTTransformer:
         self.feedName = feedName
         self.mqttConnected = False
         self.session = requests.Session()
-        retry = Retry(connect=60, backoff_factor=1.5)
+        # the feed server sometimes answers with a 5xx error, try again soon instead of waiting for the next poll
+        retry = Retry(connect=60, backoff_factor=1.5, status=2, status_forcelist=(500, 502, 503, 504),
+                      allowed_methods=frozenset(['GET']), raise_on_status=False)
         adapter = HTTPAdapter(max_retries=retry)
         self.session.mount(gtfsrtFeedURL, adapter)
         self.session.headers.update(json.loads(gtfsrtFeedHeaders))
         self.OTPData = None
         self.lastFeedTimestamp = None
+        self.lastFeedDigest = None
 
 
     def onMQTTConnected(self, client, userdata, flags, rc):
@@ -69,73 +79,86 @@ class GTFSRTHTTP2MQTTTransformer:
 
     def doGTFSRTPolling(self):
         print("doGTFSRTPolling", time.ctime())
-        r = self.session.get(self.gtfsrtFeedURL)
+        started = time.time()
+        try:
+            r = self.session.get(self.gtfsrtFeedURL, timeout=(10, 60))
+        except requests.RequestException as err:
+            print("GTFS RT feed request failed: " + repr(err))
+            return
+        fetched = time.time()
 
         if r.status_code != 200:
-            print("GTFS RT feed returned with " + str(r.status_code))
+            print("GTFS RT feed returned with " + str(r.status_code) + " after {:.1f} s: ".format(fetched - started) + r.text[:200])
             return
         feedmsg = gtfs_realtime_pb2.FeedMessage()
         try:
             feedmsg.ParseFromString(r.content)
+        except DecodeError as err:
+            print("GTFS RT feed could not be parsed ({} bytes): {}".format(len(r.content), err))
+            return
+        parsed = time.time()
 
-            # Do not send messages for feeds older than already sent
-            feedTimestamp = feedmsg.header.timestamp
-            if self.lastFeedTimestamp is None or feedTimestamp >= self.lastFeedTimestamp:
-                self.lastFeedTimestamp = feedTimestamp
-            else:
+        # Do not send messages for feeds older than already sent or for a feed identical to the previous one
+        feedTimestamp = feedmsg.header.timestamp
+        digest = hashlib.md5(r.content, usedforsecurity=False).digest()
+        if self.lastFeedTimestamp is not None:
+            if feedTimestamp < self.lastFeedTimestamp:
                 print(f"Received a feed with timestamp earlier ({feedTimestamp}) than seen before ({self.lastFeedTimestamp}), skipping this update")
                 return
+            if feedTimestamp == self.lastFeedTimestamp and digest == self.lastFeedDigest:
+                print("Feed has not changed, skipping this update")
+                return
+        self.lastFeedTimestamp = feedTimestamp
+        self.lastFeedDigest = digest
 
-            for entity in feedmsg.entity:
-                if not entity.HasField('vehicle'):
-                    continue
-                # Don't send message if route_id is missing from entity
-                # HasField() function does not work as expected, therefore we need check it like this
-                if "route_id" not in map(lambda x: x.name, entity.vehicle.trip.DESCRIPTOR.fields):
-                    continue
+        published = 0
+        for entity in feedmsg.entity:
+            if not entity.HasField('vehicle'):
+                continue
 
-                nfeedmsg = gtfs_realtime_pb2.FeedMessage()
-                nfeedmsg.header.gtfs_realtime_version = "1.0"
-                nfeedmsg.header.incrementality = nfeedmsg.header.DIFFERENTIAL
-                nfeedmsg.header.timestamp = int(time.time())
-                nent = nfeedmsg.entity.add()
+            nfeedmsg = gtfs_realtime_pb2.FeedMessage()
+            nfeedmsg.header.gtfs_realtime_version = "1.0"
+            nfeedmsg.header.incrementality = nfeedmsg.header.DIFFERENTIAL
+            nfeedmsg.header.timestamp = int(time.time())
+            nent = nfeedmsg.entity.add()
 
-                nent.CopyFrom(entity)
+            nent.CopyFrom(entity)
 
-                trip_id = entity.vehicle.trip.trip_id
-                route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
-                direction_id = entity.vehicle.trip.direction_id
-                trip_headsign = entity.vehicle.vehicle.label
-                # headsigns with / cause problems in topics
-                if '/' in trip_headsign:
-                    trip_headsign = ''
-                latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
-                latitude_head = latitude[:2]
-                longitude = "{:.6f}".format(entity.vehicle.position.longitude)
-                longitude_head = longitude[:2]
-                geohash_head = latitude_head + ";" + longitude_head
-                geohash_firstdeg = latitude[3] + "" + longitude[3]
-                geohash_seconddeg = latitude[4] + "" + longitude[4]
-                geohash_thirddeg = latitude[5] + "" + longitude[5]
-                stop_id = entity.vehicle.stop_id
-                start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
-                vehicle_id = entity.vehicle.vehicle.id
-                short_name = utils.parse_short_name(self.feedName, trip_id, route_id, self.OTPData)
-                color = utils.parse_color(self.feedName, trip_id, route_id, self.OTPData)
-                mode = utils.parse_mode(self.feedName, trip_id, route_id, self.OTPData)
+            trip_id = entity.vehicle.trip.trip_id
+            route_id = utils.parse_route_id(self.feedName, entity.vehicle.trip.route_id, trip_id, self.OTPData)
+            direction_id = entity.vehicle.trip.direction_id
+            trip_headsign = entity.vehicle.vehicle.label
+            # headsigns with / cause problems in topics
+            if '/' in trip_headsign:
+                trip_headsign = ''
+            latitude = "{:.6f}".format(entity.vehicle.position.latitude) # Force coordinates to have 6 numbers
+            latitude_head = latitude[:2]
+            longitude = "{:.6f}".format(entity.vehicle.position.longitude)
+            longitude_head = longitude[:2]
+            geohash_head = latitude_head + ";" + longitude_head
+            geohash_firstdeg = latitude[3] + "" + longitude[3]
+            geohash_seconddeg = latitude[4] + "" + longitude[4]
+            geohash_thirddeg = latitude[5] + "" + longitude[5]
+            stop_id = entity.vehicle.stop_id
+            start_time = entity.vehicle.trip.start_time[0:5] # hh:mm
+            vehicle_id = entity.vehicle.vehicle.id
+            short_name = utils.parse_short_name(self.feedName, trip_id, route_id, self.OTPData)
+            color = utils.parse_color(self.feedName, trip_id, route_id, self.OTPData)
+            mode = utils.parse_mode(self.feedName, trip_id, route_id, self.OTPData)
 
-                # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/<color>/
-                # GTFS RT feed used for testing was missing some information so those are empty
-                full_topic = '{0}/{1}///{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/{15}/'.format(
-                    self.baseMqttTopic, self.feedName, mode, route_id, direction_id,
-                    trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
-                    geohash_seconddeg, geohash_thirddeg, short_name, color).replace("+","").replace("#", "")
+            # gtfsrt/vp/<feed_name>/<agency_id>/<agency_name>/<mode>/<route_id>/<direction_id>/<trip_headsign>/<trip_id>/<next_stop>/<start_time>/<vehicle_id>/<geohash_head>/<geohash_firstdeg>/<geohash_seconddeg>/<geohash_thirddeg>/<short_name>/<color>/
+            # GTFS RT feed used for testing was missing some information so those are empty
+            full_topic = '{0}/{1}///{2}/{3}/{4}/{5}/{6}/{7}/{8}/{9}/{10}/{11}/{12}/{13}/{14}/{15}/'.format(
+                self.baseMqttTopic, self.feedName, mode, route_id, direction_id,
+                trip_headsign, trip_id, stop_id, start_time, vehicle_id, geohash_head, geohash_firstdeg,
+                geohash_seconddeg, geohash_thirddeg, short_name, color).replace("+","").replace("#", "")
 
-                sernmesg = nfeedmsg.SerializeToString()
-                self.client.publish(full_topic, sernmesg)
-        except:
-            print(r.content)
-            raise
+            sernmesg = nfeedmsg.SerializeToString()
+            self.client.publish(full_topic, sernmesg)
+            published += 1
+
+        print("Published {} vehicles: fetch {:.1f} s ({:.1f} MB), parse {:.2f} s, publish {:.2f} s".format(
+            published, fetched - started, len(r.content) / 1e6, parsed - fetched, time.time() - parsed))
 
     def startOTPPolling(self):
         print("Starting OTP poller")
@@ -150,7 +173,7 @@ class GTFSRTHTTP2MQTTTransformer:
             read=30,
             connect=30,
             backoff_factor=10,
-            method_whitelist=frozenset(['GET', 'OPTIONS', 'POST'])
+            allowed_methods=frozenset(['GET', 'OPTIONS', 'POST'])
         )
         adapter = HTTPAdapter(max_retries=retry)
         otp_polling_session.mount(OTP_URL, adapter)
